@@ -1,0 +1,1 @@
+Add replace the wordlist with FUZZ
