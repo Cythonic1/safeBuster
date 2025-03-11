@@ -1,1 +1,6 @@
-Add replace the wordlist with FUZZ
+Add replace the wordlist with FUZZ [done]
+Add multiThreading [done]
+reading words from wordlist [done]
+
+
+adding http method handler
