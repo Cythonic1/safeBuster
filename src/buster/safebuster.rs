@@ -1,8 +1,9 @@
-use std::{fs, io::{self, BufRead}, sync::Arc};
+use std::{fs, io::{self, BufRead}, sync::Arc, time::Duration};
 use reqwest::{blocking::Client, header::{HeaderMap, HeaderName, HeaderValue}, StatusCode};
-use super::cli;
+use super::{cli::{self, HTTPMethods}, DEFAULT_STATUS_CODE};
 use super::FUZZ;
 use crossbeam_channel::{bounded, Sender, Receiver};
+use std::time::Instant;
 
 
 fn init_headers_with_defaults() -> HeaderMap {
@@ -82,11 +83,9 @@ pub fn search_fuzz(mut args: cli::Args, word: &str) -> cli::Args{
     }
 
 
-    if let Some(data) = args.data.as_mut() {
-        if data.contains(FUZZ) {
-            *data = data.replace(FUZZ, word); // Dereference and assign back
+    if args.data.contains(FUZZ) {
+            args.data = args.data.replace(FUZZ, word); // Dereference and assign back
             counter_occurences += 1;
-        }
     }
     if let Some(headers) = args.headers.as_mut() {
         for header in headers.iter_mut() {
@@ -100,72 +99,80 @@ pub fn search_fuzz(mut args: cli::Args, word: &str) -> cli::Args{
 
     // println!("headers after change is {:#?}", args.headers);
     // println!("You have added {} FUZZ we will replace all of them", counter_occurences);
-    
-    args
+        
+    return args;
 
+
+}
+fn filter_response(status_code: StatusCode, res_body: &str, res_len: usize, filters: cli::Args) -> bool{
+    filters.filter_status.as_ref().map_or(DEFAULT_STATUS_CODE.contains(&status_code), |code| code.contains(&status_code)) ||
+    filters.filter_reponse_len.as_ref().map_or(false, |len|len.contains(&res_len)) || 
+    filters.contain.as_ref().map_or(false, |content| content.contains(res_body))
 
 }
 fn craft_request(args: cli::Args, client : Client, word: String){
 
-    let args_clone= search_fuzz(args.clone(), &word);
-    let headers_hash = prepare_headers(args_clone.headers);
-    // TODO : handle different HTTP methods
-    // println!("Headers {:#?}", headers_hash);
-    // if let Some(method) = args_clone.method {
-    //     // for now assume it only post
-    //     //
-    //     let res = client.post(args_clone.url).headers(headers_hash).body(args_clone.data.unwrap()).timeout(std::time::Duration::from_secs(10)).send().expect("Something");
-    //     let res_status = res.status();
+    let args_clone = search_fuzz(args.clone(), &word);
+    let headers_hash = prepare_headers(args_clone.headers.clone());
 
-    //     match res.text() {
-    //         Ok(data) => {
-    //             if let Some(expected_res) = args_clone.contain {
+    // Start measuring the request duration
+    let start_time = Instant::now();
 
-    //                 // println!("Word : {word}");
-    //                 if data.contains(&expected_res){
-    //                     println!("The word: {} has gives the expected results", word);
-    //                     return;
-    //                 }
-    //             }else {
-    //                 // if res_status == StatusCode::OK {
-    //                 //     println!("The word: {} has gives the status code of 200", word);
-    //                 //     return;
-    //                 // }
-    //                 return ;
-    //             }
-    //         }
-    //         Err(err) => {
-    //             eprintln!("Error getting response text: {}", err);
-    //             return;
-    //         }
+    let res = match args_clone.method {
+        Some(HTTPMethods::GET) => match client
+            .get(args_clone.url.clone())
+            .timeout(Duration::from_secs(3))
+            .headers(headers_hash)
+            .send() 
+        {
+            Ok(body) => body,
+            Err(_) => return,
+        },
+        Some(HTTPMethods::POST) => match client
+            .post(args_clone.url.clone())
+            .timeout(Duration::from_secs(3))
+            .headers(headers_hash)
+            .body(args_clone.data.clone())
+            .send()
+        {
+            Ok(body) => body,
+            Err(_) => return,
+        },
+        None => {
+            println!("No HTTP method provided.");
+            return;
+        }
+    };
 
-    //     }
-    //     return;
+    // Measure the duration
+    let duration = start_time.elapsed();
+    let duration_ms = duration.as_millis();
 
-    // }
-    let res = client.get(args_clone.url).headers(headers_hash).send().unwrap();
-    let res_status = res.status();
+    let status_code = res.status();
 
     match res.text() {
-        Ok(data) => {
-            if let Some(expected_res) = args_clone.contain {
-                if data.contains(&expected_res){
-                    println!("The word: {} has gives the expected results", word);
-                }
-            }else {
-                if res_status == StatusCode::OK {
-                    println!("The word: {} has gives the status code of 200", word);
-                }
+        Ok(body) => {
+            if filter_response(status_code, &body, body.len(), args_clone) {
+                let size = body.len();
+                let words = body.split_whitespace().count();
+                let lines = body.lines().count();
+
+                // Print formatted output
+                println!(
+                    "{:<24} [Status: {}, Size: {}, Words: {}, Lines: {}, Duration: {}ms]",
+                    word,
+                    status_code.as_u16(),
+                    size,
+                    words,
+                    lines,
+                    duration_ms
+                );
             }
         }
-        Err(err) => {
-            eprintln!("Error getting response text: {}", err);
+        Err(_) => {
+            todo!()
         }
-        
     }
-
-    // println!("Response : {:#?}", res);
-
 
 }
 

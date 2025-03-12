@@ -1,8 +1,12 @@
 use std::{path::PathBuf, usize};
+use clap::{Parser, ValueEnum};
+use reqwest::StatusCode;
 
-// Handle command lines;
-use clap::Parser;
-
+#[derive(Debug, Clone, ValueEnum)]
+pub enum HTTPMethods {
+    POST,
+    GET,
+}
 
 
 #[derive(Debug, Parser, Clone)]
@@ -18,17 +22,24 @@ pub struct Args{
     #[arg(short, long)]
     pub wordlist: PathBuf,
 
-    #[arg(long = "X" , default_value = "GET")]
-    pub method: Option<String>,
+    #[arg(long = "X" , value_enum)]
+    pub method: Option<HTTPMethods>,
 
 
-    #[arg(short, long, help = "check the response for given value")]
-    pub contain: Option<String>,
     
     #[arg(short, long, default_value_t = 5)]
     pub threads : usize,
 
-    #[arg(short, long, help = "the body data of POST request empty by defaults")]
-    pub data : Option<String>
+    #[arg(short, long, help = "the body data of POST request empty by defaults", default_value = "")]
+    pub data : String,
+
+    #[arg(long = "fs", help = "Filter By status code", value_delimiter = ',')]
+    pub filter_status: Option<Vec<StatusCode>>,
+
+    #[arg( long = "fd", help = "Filter By body data ")]
+    pub contain: Option<String>,
+
+    #[arg(long = "fr", help = "Filter By reponse Length", value_delimiter = ',')]
+    pub filter_reponse_len: Option<Vec<usize>>
 }
 
