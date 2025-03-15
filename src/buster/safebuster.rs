@@ -181,7 +181,7 @@ pub async fn safe_buster(args: cli::Args) -> tokio::io::Result<()>{
 
     const MAX_CONCURRENT_TASKS: usize = 100;
 
-    let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_TASKS));
+    let semaphore = Arc::new(Semaphore::new(args.concurrent_tasks));
     let client = Arc::new(
         Client::builder()
             .timeout(Duration::from_secs(1)) // Apply timeout at client level
@@ -194,12 +194,11 @@ pub async fn safe_buster(args: cli::Args) -> tokio::io::Result<()>{
     let mut tasks = JoinSet::new();
     let counter = Arc::new(AtomicUsize::new(0)); // Atomic counter for tracking progress
     let counter_clone = Arc::clone(&counter);
-    let progress_task = tokio::spawn(async move {
-        loop {
-            sleep(Duration::from_secs(1)).await;
-            println!("Words processed so far: {}", counter_clone.load(Ordering::Relaxed));
-        }
-    });
+    // let progress_task = tokio::spawn(async move { loop {
+    //         sleep(Duration::from_secs(1)).await;
+    //         println!("Words processed so far: {}", counter_clone.load(Ordering::Relaxed));
+    //     }
+    // });
     while let Some(word) = lines.next_line().await?{
         let permit = semaphore.clone().acquire_owned().await.unwrap();
         let args = args.clone();
@@ -214,7 +213,7 @@ pub async fn safe_buster(args: cli::Args) -> tokio::io::Result<()>{
         });
     }
     while let Some(_) = tasks.join_next().await {}
-    progress_task.abort();
+    // progress_task.abort();
     println!("Total words processed: {}", counter.load(Ordering::Relaxed));
     Ok(())
 
