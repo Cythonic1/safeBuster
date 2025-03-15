@@ -1,5 +1,7 @@
-use std::{fs, io::{self, BufRead}, sync::Arc, time::Duration};
-use reqwest::{blocking::Client, header::{HeaderMap, HeaderName, HeaderValue}, StatusCode};
+use std::{sync::Arc, time::Duration};
+use clap::error::Result;
+use reqwest::{Client, header::{HeaderMap, HeaderName, HeaderValue}, StatusCode};
+use tokio::io::{AsyncBufReadExt, self};
 use super::{cli::{self, HTTPMethods}, DEFAULT_STATUS_CODE};
 use super::FUZZ;
 use crossbeam_channel::{bounded, Sender, Receiver};
@@ -110,7 +112,7 @@ fn filter_response(status_code: StatusCode, res_body: &str, res_len: usize, filt
     filters.contain.as_ref().map_or(false, |content| content.contains(res_body))
 
 }
-fn craft_request(args: cli::Args, client : Client, word: String){
+async fn craft_request(args: cli::Args, client : Client, word: String){
 
     let args_clone = search_fuzz(args.clone(), &word);
     let headers_hash = prepare_headers(args_clone.headers.clone());
@@ -123,7 +125,8 @@ fn craft_request(args: cli::Args, client : Client, word: String){
             .get(args_clone.url.clone())
             .timeout(Duration::from_secs(3))
             .headers(headers_hash)
-            .send() 
+            .send()
+            .await
         {
             Ok(body) => body,
             Err(_) => return,
@@ -134,6 +137,7 @@ fn craft_request(args: cli::Args, client : Client, word: String){
             .headers(headers_hash)
             .body(args_clone.data.clone())
             .send()
+            .await
         {
             Ok(body) => body,
             Err(_) => return,
@@ -150,7 +154,7 @@ fn craft_request(args: cli::Args, client : Client, word: String){
 
     let status_code = res.status();
 
-    match res.text() {
+    match res.text().await {
         Ok(body) => {
             if filter_response(status_code, &body, body.len(), args_clone) {
                 let size = body.len();
@@ -176,49 +180,56 @@ fn craft_request(args: cli::Args, client : Client, word: String){
 
 }
 
-pub fn safe_buster(args: cli::Args) {
+pub async fn safe_buster(args: cli::Args) -> tokio::io::Result<()>{
+    // let (sender, receiver): (Sender<String>, Receiver<String>) = bounded(args.threads * 5);
+
+    // let args = Arc::new(args);
+    // let client = Arc::new(client);
+
+    // let mut handles = vec![];
+
+    // for _ in 0..args.threads {
+    //     let receiver = receiver.clone();
+    //     let args = Arc::clone(&args);
+    //     let client = Arc::clone(&client);
+
+    //     let handle = std::thread::spawn(move || {
+    //         for line in receiver {
+    //             // Clone necessary data for this request
+    //             let args_clone = (*args).clone();
+    //             let client_clone = (*client).clone();
+    //             craft_request(args_clone, client_clone, line);
+    //         }
+    //     });
+
+    //     handles.push(handle);
+    // }
+
+    // // Read lines and send to workers with backpressure
+    // for line in reader.lines() {
+    //     if let Ok(ok_line) = line {
+    //         // This will block if the channel is full, preventing memory overload
+    //         sender.send(ok_line).expect("Failed to send line to worker");
+    //     }
+    // }
+
+    // // Close the channel by dropping the sender
+    // drop(sender);
+
+    // // Wait for all workers to finish
+    // for handle in handles {
+    //     handle.join().unwrap();
+    // }
+
     let client = Client::new();
-    let file = fs::File::open(args.wordlist.clone()).expect("Failed to open wordlist");
-    let reader = io::BufReader::new(file);
+    let file = tokio::fs::File::open(args.wordlist.clone()).await.expect("Failed to open wordlist");
+    let reader = tokio::io::BufReader::new(file);
+    let mut lines = reader.lines();
 
-    let (sender, receiver): (Sender<String>, Receiver<String>) = bounded(args.threads * 5);
-
-    let args = Arc::new(args);
-    let client = Arc::new(client);
-
-    let mut handles = vec![];
-
-    for _ in 0..args.threads {
-        let receiver = receiver.clone();
-        let args = Arc::clone(&args);
-        let client = Arc::clone(&client);
-
-        let handle = std::thread::spawn(move || {
-            for line in receiver {
-                // Clone necessary data for this request
-                let args_clone = (*args).clone();
-                let client_clone = (*client).clone();
-                craft_request(args_clone, client_clone, line);
-            }
-        });
-
-        handles.push(handle);
+    while let Some(word) = lines.next_line().await?{
+        println!("{word}");
     }
+    Ok(())
 
-    // Read lines and send to workers with backpressure
-    for line in reader.lines() {
-        if let Ok(ok_line) = line {
-            // This will block if the channel is full, preventing memory overload
-            sender.send(ok_line).expect("Failed to send line to worker");
-        }
-    }
-
-    // Close the channel by dropping the sender
-    drop(sender);
-
-    // Wait for all workers to finish
-    for handle in handles {
-        handle.join().unwrap();
-    }
 }
 

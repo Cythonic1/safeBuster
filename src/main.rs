@@ -1,7 +1,9 @@
 use clap::Parser;
+use tokio::main;
 mod buster;
-fn main() {
+#[tokio::main]
+async fn main() {
     let args = buster::cli::Args::parse();
-    buster::safebuster::safe_buster(args.clone());
+    let _ = buster::safebuster::safe_buster(args.clone()).await;
     // let _ = buster::safebuster::search_fuzz(args, "Something");
 }
