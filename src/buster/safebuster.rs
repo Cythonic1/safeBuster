@@ -1,10 +1,9 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::{atomic::{AtomicUsize, Ordering}, Arc,};
 use clap::error::Result;
 use reqwest::{Client, header::{HeaderMap, HeaderName, HeaderValue}, StatusCode};
-use tokio::io::{AsyncBufReadExt, self};
+use tokio::{io::{self, AsyncBufReadExt}, task::JoinSet,time::{sleep, Duration}, sync::Semaphore };
 use super::{cli::{self, HTTPMethods}, DEFAULT_STATUS_CODE};
 use super::FUZZ;
-use crossbeam_channel::{bounded, Sender, Receiver};
 use std::time::Instant;
 
 
@@ -112,7 +111,7 @@ fn filter_response(status_code: StatusCode, res_body: &str, res_len: usize, filt
     filters.contain.as_ref().map_or(false, |content| content.contains(res_body))
 
 }
-async fn craft_request(args: cli::Args, client : Client, word: String){
+async fn craft_request(args: cli::Args, client : Arc<Client>, word: String){
 
     let args_clone = search_fuzz(args.clone(), &word);
     let headers_hash = prepare_headers(args_clone.headers.clone());
@@ -123,7 +122,6 @@ async fn craft_request(args: cli::Args, client : Client, word: String){
     let res = match args_clone.method {
         Some(HTTPMethods::GET) => match client
             .get(args_clone.url.clone())
-            .timeout(Duration::from_secs(3))
             .headers(headers_hash)
             .send()
             .await
@@ -133,7 +131,6 @@ async fn craft_request(args: cli::Args, client : Client, word: String){
         },
         Some(HTTPMethods::POST) => match client
             .post(args_clone.url.clone())
-            .timeout(Duration::from_secs(3))
             .headers(headers_hash)
             .body(args_clone.data.clone())
             .send()
@@ -173,62 +170,52 @@ async fn craft_request(args: cli::Args, client : Client, word: String){
                 );
             }
         }
-        Err(_) => {
-            todo!()
+        Err(err) => {
+            eprintln!("Error: {err}");
         }
     }
 
 }
 
 pub async fn safe_buster(args: cli::Args) -> tokio::io::Result<()>{
-    // let (sender, receiver): (Sender<String>, Receiver<String>) = bounded(args.threads * 5);
 
-    // let args = Arc::new(args);
-    // let client = Arc::new(client);
+    const MAX_CONCURRENT_TASKS: usize = 100;
 
-    // let mut handles = vec![];
-
-    // for _ in 0..args.threads {
-    //     let receiver = receiver.clone();
-    //     let args = Arc::clone(&args);
-    //     let client = Arc::clone(&client);
-
-    //     let handle = std::thread::spawn(move || {
-    //         for line in receiver {
-    //             // Clone necessary data for this request
-    //             let args_clone = (*args).clone();
-    //             let client_clone = (*client).clone();
-    //             craft_request(args_clone, client_clone, line);
-    //         }
-    //     });
-
-    //     handles.push(handle);
-    // }
-
-    // // Read lines and send to workers with backpressure
-    // for line in reader.lines() {
-    //     if let Ok(ok_line) = line {
-    //         // This will block if the channel is full, preventing memory overload
-    //         sender.send(ok_line).expect("Failed to send line to worker");
-    //     }
-    // }
-
-    // // Close the channel by dropping the sender
-    // drop(sender);
-
-    // // Wait for all workers to finish
-    // for handle in handles {
-    //     handle.join().unwrap();
-    // }
-
-    let client = Client::new();
+    let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_TASKS));
+    let client = Arc::new(
+        Client::builder()
+            .timeout(Duration::from_secs(1)) // Apply timeout at client level
+            .build()
+            .expect("Failed to create HTTP client"),
+    );
     let file = tokio::fs::File::open(args.wordlist.clone()).await.expect("Failed to open wordlist");
     let reader = tokio::io::BufReader::new(file);
     let mut lines = reader.lines();
-
+    let mut tasks = JoinSet::new();
+    let counter = Arc::new(AtomicUsize::new(0)); // Atomic counter for tracking progress
+    let counter_clone = Arc::clone(&counter);
+    let progress_task = tokio::spawn(async move {
+        loop {
+            sleep(Duration::from_secs(1)).await;
+            println!("Words processed so far: {}", counter_clone.load(Ordering::Relaxed));
+        }
+    });
     while let Some(word) = lines.next_line().await?{
-        println!("{word}");
+        let permit = semaphore.clone().acquire_owned().await.unwrap();
+        let args = args.clone();
+        let client = Arc::clone(&client);
+        let counter = Arc::clone(&counter);
+
+        counter.fetch_add(1, Ordering::Relaxed);
+        tasks.spawn(async move {
+            let _permit = permit; // Keeps the semaphore permit alive
+            craft_request(args, client, word).await;
+
+        });
     }
+    while let Some(_) = tasks.join_next().await {}
+    progress_task.abort();
+    println!("Total words processed: {}", counter.load(Ordering::Relaxed));
     Ok(())
 
 }

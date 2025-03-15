@@ -1,7 +1,6 @@
 use clap::Parser;
-use tokio::main;
 mod buster;
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread", worker_threads = 20)]
 async fn main() {
     let args = buster::cli::Args::parse();
     let _ = buster::safebuster::safe_buster(args.clone()).await;

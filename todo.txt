@@ -2,7 +2,7 @@ Add replace the wordlist with FUZZ [done]
 Add multiThreading [done]
 reading words from wordlist [done]
 adding http method handler [done]
+Use Async Operations [done 90%]
 
-Use Async Operations
 checking the require flags based on others
 ability to parse files and search for FUZZ to perfome the same Operations
