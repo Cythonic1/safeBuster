@@ -34,7 +34,7 @@ pub struct Args{
     pub data : String,
 
     #[arg(long = "fs", help = "Filter By status code", value_delimiter = ',')]
-    pub filter_status: Option<Vec<StatusCode>>,
+    pub filter_status: Option<Vec<u16>>,
 
     #[arg( long = "fd", help = "Filter By body data ")]
     pub contain: Option<String>,
