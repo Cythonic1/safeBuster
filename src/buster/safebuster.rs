@@ -1,7 +1,7 @@
 use std::{ path::PathBuf, process::Command, sync::{atomic::{AtomicUsize, Ordering}, Arc,}};
 use futures_util::io::BufReader;
 use reqwest::{Client, header::{HeaderMap, HeaderName, HeaderValue}, StatusCode};
-use tokio::{io::AsyncBufReadExt, task::JoinSet,time::{sleep, Duration}, sync::Semaphore };
+use tokio::{io::AsyncBufReadExt, sync::Semaphore, task::{try_id, JoinSet}, time::{sleep, Duration} };
 use super::{cli::{self, HTTPMethods}, DEFAULT_STATUS_CODE};
 use super::FUZZ;
 use std::time::Instant;
@@ -52,14 +52,9 @@ fn init_headers_with_value(headers: Vec<String>) -> HeaderMap {
         }
     }
 
-    println!("{:?}", hash);
     hash
 }
 
-// string cmd
-// loop extract the fuzz place
-// cost u=f"https{Fd}"
-//
 fn prepare_headers(headers: Option<Vec<String>>) -> HeaderMap{
     let  headers_hash;
     if let Some(header) = headers{
@@ -72,12 +67,8 @@ fn prepare_headers(headers: Option<Vec<String>>) -> HeaderMap{
     }
 }
 
-// take args then search for fuzz.
-// replace the args after taking the word
-// then pass the new args into the craft request to make request with new created 
-// args that includes the word replaced.
 pub fn search_fuzz(mut args: cli::Args, word: &str) -> cli::Args{
-    let mut counter_occurences = 0;
+    let mut counter_occurences  = 0;
     if args.url.contains(FUZZ){
         args.url = args.url.replace(FUZZ, word);
         counter_occurences += 1;
@@ -99,8 +90,6 @@ pub fn search_fuzz(mut args: cli::Args, word: &str) -> cli::Args{
 
     }
 
-    // println!("headers after change is {:#?}", args.headers);
-    // println!("You have added {} FUZZ we will replace all of them", counter_occurences);
         
     return args;
 
@@ -140,9 +129,21 @@ fn read_until_char(input: &str, delimiter: &str) -> Option<super::PartingFileInf
 
 }
 
+fn get_prams(test :String) -> Option<String>{
+    let start_get = test.find("?");
+    let filter_str:String ;
+    if let Some(index) = start_get {
+        filter_str = test[index..].to_string();
+        let prams = read_until_char(&filter_str, " ");
+        return Some(prams.unwrap().0);
+    }else{
+        return None
+    }
+
+}
+
 // TODO: Continue Parsing The File.
 pub fn parse_file(file:PathBuf, _args: super::cli::Args) -> Option<Vec<String>> {
-    
     let file_content = match std::fs::read_to_string(file){
         Ok(content) => content,
         Err(err) => {
@@ -151,22 +152,29 @@ pub fn parse_file(file:PathBuf, _args: super::cli::Args) -> Option<Vec<String>> 
         }
     };
     let url = read_until_char(&file_content, "\r\n");
+    println!("URL: {:?}", url);
+    // let prams = get_prams(url.unwrap().0);
     let data_after_url = if let Some(data) = url {
         data
     }else{
         return None;
     };
 
+    println!("Data After rul: {:?}", data_after_url.0);
+    let prams = get_prams(data_after_url.0);
+    println!("GET PRAMS : {:?}", prams.unwrap());
+
     let headers = read_until_char(&data_after_url.1, "\r\n\r\n");
 
     let headers_vec: Vec<String> = headers.unwrap().0.replace("\r\n", ",").split(",").map(|s| s.to_string()).collect();
+    println!("HEADERS: {:#?}",headers_vec );
 
     let parsed_heaers = prepare_headers(Some(headers_vec));
 
     let urlconst = parsed_heaers.iter()
         .find(|x| x.0 == "Host")
         .map(|x| x.1.clone());
-    println!("Host is : {:?}", urlconst.unwrap());
+    // println!("Host is : {:?}", urlconst.unwrap());
 
 
     Some(vec!["Hellow".to_string()])

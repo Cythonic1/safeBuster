@@ -29,5 +29,6 @@ const DEFAULT_STATUS_CODE: &[u16] = &[
 ];
 
 //(index, res of string);
+#[derive(Clone, Debug)]
 struct PartingFileInfo(String, String);
 const FUZZ :&str= "FUZZ";
