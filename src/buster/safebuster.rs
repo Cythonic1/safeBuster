@@ -158,7 +158,7 @@ fn get_prams(test: String) -> Option<String> {
 
 // TODO: Continue Parsing The File.
 // TODO : Make it in its own module
-// NOTE: Everything works as expected for now But i need to segmnet the code and handle the errors
+//
 pub fn parse_file(file: PathBuf, _args: super::cli::Args) -> Option<Vec<String>> {
     // Cheching the existence of the file and return its content
     let file_content = match std::fs::read_to_string(file) {

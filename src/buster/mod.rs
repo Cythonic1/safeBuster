@@ -3,10 +3,8 @@ use std::usize;
 use reqwest::StatusCode;
 
 pub mod cli;
+pub mod filehandle;
 pub mod safebuster;
-
-
-
 
 const DEFAULT_STATUS_CODE: &[u16] = &[
     StatusCode::OK.as_u16(),
@@ -25,10 +23,10 @@ const DEFAULT_STATUS_CODE: &[u16] = &[
     StatusCode::UNAUTHORIZED.as_u16(),
     StatusCode::FORBIDDEN.as_u16(),
     StatusCode::METHOD_NOT_ALLOWED.as_u16(),
-    StatusCode::BAD_REQUEST.as_u16()
+    StatusCode::BAD_REQUEST.as_u16(),
 ];
 
 //(index, res of string);
 #[derive(Clone, Debug)]
 struct PartingFileInfo(String, String);
-const FUZZ :&str= "FUZZ";
+const FUZZ: &str = "FUZZ";
