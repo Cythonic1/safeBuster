@@ -1,11 +1,29 @@
-use std::{ path::PathBuf, process::Command, sync::{atomic::{AtomicUsize, Ordering}, Arc,}};
-use futures_util::io::BufReader;
-use reqwest::{Client, header::{HeaderMap, HeaderName, HeaderValue}, StatusCode};
-use tokio::{io::AsyncBufReadExt, sync::Semaphore, task::{try_id, JoinSet}, time::{sleep, Duration} };
-use super::{cli::{self, HTTPMethods}, DEFAULT_STATUS_CODE};
 use super::FUZZ;
+use super::{
+    cli::{self, HTTPMethods},
+    DEFAULT_STATUS_CODE,
+};
+use futures_util::io::BufReader;
+use reqwest::{
+    header::{HeaderMap, HeaderName, HeaderValue},
+    Client, StatusCode,
+};
+use std::process::ExitStatus;
 use std::time::Instant;
-
+use std::{
+    path::PathBuf,
+    process::Command,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+};
+use tokio::{
+    io::AsyncBufReadExt,
+    sync::Semaphore,
+    task::{try_id, JoinSet},
+    time::{sleep, Duration},
+};
 
 fn init_headers_with_defaults() -> HeaderMap {
     let mut hash = HeaderMap::new();
@@ -55,134 +73,168 @@ fn init_headers_with_value(headers: Vec<String>) -> HeaderMap {
     hash
 }
 
-fn prepare_headers(headers: Option<Vec<String>>) -> HeaderMap{
-    let  headers_hash;
-    if let Some(header) = headers{
+fn prepare_headers(headers: Option<Vec<String>>) -> HeaderMap {
+    let headers_hash;
+    if let Some(header) = headers {
         headers_hash = init_headers_with_value(header);
         return headers_hash;
-
-    }else{
+    } else {
         headers_hash = init_headers_with_defaults();
         return headers_hash;
     }
 }
 
-pub fn search_fuzz(mut args: cli::Args, word: &str) -> cli::Args{
-    let mut counter_occurences  = 0;
-    if args.url.contains(FUZZ){
+pub fn search_fuzz(mut args: cli::Args, word: &str) -> cli::Args {
+    let mut counter_occurences = 0;
+    if args.url.contains(FUZZ) {
         args.url = args.url.replace(FUZZ, word);
         counter_occurences += 1;
         // println!("URL after change is {:?}", args.url);
     }
 
-
     if args.data.contains(FUZZ) {
-            args.data = args.data.replace(FUZZ, word); // Dereference and assign back
-            counter_occurences += 1;
+        args.data = args.data.replace(FUZZ, word); // Dereference and assign back
+        counter_occurences += 1;
     }
     if let Some(headers) = args.headers.as_mut() {
         for header in headers.iter_mut() {
-            if header.contains(FUZZ){
+            if header.contains(FUZZ) {
                 counter_occurences += 1;
                 *header = header.replace(FUZZ, word);
             }
         }
-
     }
 
-        
     return args;
-
-
 }
-fn filter_response(status_code: u16, res_body: &str, res_len: usize, filters: cli::Args) -> bool{
+fn filter_response(status_code: u16, res_body: &str, res_len: usize, filters: cli::Args) -> bool {
     // println!("\r Status code is {status_code}");
-    let status_match =  if let Some(status_vec) = filters.filter_status {
+    let status_match = if let Some(status_vec) = filters.filter_status {
         status_vec.contains(&status_code)
-    }else {
+    } else {
         DEFAULT_STATUS_CODE.contains(&status_code)
     };
 
     // Filter by response length
-    let length_match = filters.filter_reponse_len
+    let length_match = filters
+        .filter_reponse_len
         .as_ref()
         .map_or(false, |lengths| lengths.contains(&res_len));
 
     // Filter by response body containing specific text
-    let content_match = filters.contain
+    let content_match = filters
+        .contain
         .as_ref()
         .map_or(false, |contents| contents.contains(&res_body));
 
     status_match || length_match || content_match
-
 }
 
-fn read_until_char(input: &str, delimiter: &str) -> Option<super::PartingFileInfo>{
+fn read_until_char(input: &str, delimiter: &str) -> Option<super::PartingFileInfo> {
     println!("The len of the given strrring is {}", delimiter.len());
-    let match_found_index = if let Some(index) =  input.find(delimiter){
+    let match_found_index = if let Some(index) = input.find(delimiter) {
         index
-    }else{
-        return None
+    } else {
+        return None;
     };
-     
-    Some(super::PartingFileInfo(input[..match_found_index].to_string(), input[(match_found_index+delimiter.len())..].to_string()))
 
+    Some(super::PartingFileInfo(
+        input[..match_found_index].to_string(),
+        input[(match_found_index + delimiter.len())..].to_string(),
+    ))
 }
 
-fn get_prams(test :String) -> Option<String>{
+fn get_prams(test: String) -> Option<String> {
     let start_get = test.find("?");
-    let filter_str:String ;
+    let filter_str: String;
     if let Some(index) = start_get {
         filter_str = test[index..].to_string();
         let prams = read_until_char(&filter_str, " ");
         return Some(prams.unwrap().0);
-    }else{
-        return None
+    } else {
+        return None;
     }
-
 }
 
 // TODO: Continue Parsing The File.
-pub fn parse_file(file:PathBuf, _args: super::cli::Args) -> Option<Vec<String>> {
-    let file_content = match std::fs::read_to_string(file){
+// TODO : Make it in its own module
+// NOTE: Everything works as expected for now But i need to segmnet the code and handle the errors
+pub fn parse_file(file: PathBuf, _args: super::cli::Args) -> Option<Vec<String>> {
+    // Cheching the existence of the file and return its content
+    let file_content = match std::fs::read_to_string(file) {
         Ok(content) => content,
         Err(err) => {
             eprintln!("Error : {err}");
             return None;
         }
     };
+
+    // Extract the First line of the request
+    // GET /some.php?user=man HTTP/2
     let url = read_until_char(&file_content, "\r\n");
     println!("URL: {:?}", url);
     // let prams = get_prams(url.unwrap().0);
+    // unwrap the results of the first line and returns the data
     let data_after_url = if let Some(data) = url {
         data
-    }else{
+    } else {
         return None;
     };
 
     println!("Data After rul: {:?}", data_after_url.0);
+    // Extract the path which inlcude the GET prams and the Path.
+    let path: Vec<String> = data_after_url
+        .0
+        .split(" ")
+        .into_iter()
+        .map(|s| s.to_string())
+        .collect();
+
+    println!("{}", path[1]);
+    // Contrnue extracting the path. Consider adding it to the above code
+    let path_path = path[1].split("?").into_iter().next();
+
+    println!("{}", path_path.unwrap());
+
+    // Extracting the GET prameters
     let prams = get_prams(data_after_url.0);
     println!("GET PRAMS : {:?}", prams.unwrap());
 
+    // Extracting the headers
     let headers = read_until_char(&data_after_url.1, "\r\n\r\n");
 
-    let headers_vec: Vec<String> = headers.unwrap().0.replace("\r\n", ",").split(",").map(|s| s.to_string()).collect();
-    println!("HEADERS: {:#?}",headers_vec );
+    // Convert the headers into vector so we can use it in prepare_headers function
+    let headers_vec: Vec<String> = headers
+        .unwrap()
+        .0
+        .split("\r\n")
+        .map(|s| s.to_string())
+        .collect();
 
+    // Parse the headers into HeaderMap.
     let parsed_heaers = prepare_headers(Some(headers_vec));
 
-    let urlconst = parsed_heaers.iter()
+    println!("HEADERS: {:#?}", parsed_heaers);
+
+    // Extracting the host name/ DNS
+    let urlconst = parsed_heaers
+        .iter()
         .find(|x| x.0 == "Host")
         .map(|x| x.1.clone());
-    // println!("Host is : {:?}", urlconst.unwrap());
+    //println!("Host is : {:?}", urlconst.unwrap());
 
+    // printing the full path;
+    let fullpath = format!(
+        "{}{}",
+        urlconst.unwrap().to_str().unwrap(),
+        path_path.unwrap()
+    );
+    println!("Full path is : {}", fullpath);
 
     Some(vec!["Hellow".to_string()])
-
 }
 
-async fn craft_request(args: cli::Args, client : Arc<Client>, word: String){
-
+async fn craft_request(args: cli::Args, client: Arc<Client>, word: String) {
     let args_clone = search_fuzz(args.clone(), &word);
     let headers_hash = prepare_headers(args_clone.headers.clone());
 
@@ -196,7 +248,6 @@ async fn craft_request(args: cli::Args, client : Arc<Client>, word: String){
             .send()
             .await
         {
-
             Ok(body) => body,
             Err(_) => return,
         },
@@ -215,11 +266,11 @@ async fn craft_request(args: cli::Args, client : Arc<Client>, word: String){
                 .get(args_clone.url.clone())
                 .headers(headers_hash)
                 .send()
-            .await{
+                .await
+            {
                 Ok(body) => body,
-                Err(_) => return
+                Err(_) => return,
             }
-
         }
     };
 
@@ -252,11 +303,9 @@ async fn craft_request(args: cli::Args, client : Arc<Client>, word: String){
             eprintln!("\rError: {err}");
         }
     }
-
 }
 
-pub async fn safe_buster(args: cli::Args) -> tokio::io::Result<()>{
-
+pub async fn safe_buster(args: cli::Args) -> tokio::io::Result<()> {
     const MAX_CONCURRENT_TASKS: usize = 100;
 
     let semaphore = Arc::new(Semaphore::new(args.concurrent_tasks));
@@ -266,21 +315,26 @@ pub async fn safe_buster(args: cli::Args) -> tokio::io::Result<()>{
             .build()
             .expect("Failed to create HTTP client"),
     );
-    let file = tokio::fs::File::open(args.wordlist.clone()).await.expect("Failed to open wordlist");
+    let file = tokio::fs::File::open(args.wordlist.clone())
+        .await
+        .expect("Failed to open wordlist");
     let reader = tokio::io::BufReader::new(file);
     let mut lines = reader.lines();
     let mut tasks = JoinSet::new();
     let counter = Arc::new(AtomicUsize::new(0)); // Atomic counter for tracking progress
     let counter_clone = Arc::clone(&counter);
-    let progress_task = tokio::spawn(async move { 
+    let progress_task = tokio::spawn(async move {
         loop {
             sleep(Duration::from_secs(1)).await;
             // print!("\x1B[999;0H"); // Moves to row 999 (forces it to the last line)
-            print!("\rWords processed so far: {}", counter_clone.load(Ordering::Relaxed));
+            print!(
+                "\rWords processed so far: {}",
+                counter_clone.load(Ordering::Relaxed)
+            );
             std::io::Write::flush(&mut std::io::stdout()).unwrap(); // Force output refresh
         }
     });
-    while let Some(word) = lines.next_line().await?{
+    while let Some(word) = lines.next_line().await? {
         let permit = semaphore.clone().acquire_owned().await.unwrap();
         let args = args.clone();
         let client = Arc::clone(&client);
@@ -290,13 +344,13 @@ pub async fn safe_buster(args: cli::Args) -> tokio::io::Result<()>{
         tasks.spawn(async move {
             let _permit = permit; // Keeps the semaphore permit alive
             craft_request(args, client, word).await;
-
         });
     }
     while let Some(_) = tasks.join_next().await {}
     progress_task.abort();
-    println!("\rTotal words processed: {}", counter.load(Ordering::Relaxed));
+    println!(
+        "\rTotal words processed: {}",
+        counter.load(Ordering::Relaxed)
+    );
     Ok(())
-
 }
-
