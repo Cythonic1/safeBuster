@@ -1,22 +1,31 @@
 // This mainly to parse http files and make request according to them
 
-use reqwest::{header::HeaderMap, Method};
+use std::str::FromStr;
+use std::{fmt::format, os, panic};
 
-use super::cli::{self, HTTPMethods};
-struct FileParsing {
+use super::cli::{self, Args, HTTPMethods};
+use super::HeaderValeExt;
+use super::PartingFileInfo;
+use reqwest::{
+    header::{HeaderMap, HeaderName, HeaderValue},
+    Method,
+};
+pub struct FileParsing {
     args: cli::Args,
+    file_content: String,
 }
-
 impl FileParsing {
-    fn new() -> Self {
+    pub fn new(args: Args) -> Self {
         return FileParsing {
-            args: cli::Args::default(),
+            args,
+            file_content: "".to_string(),
         };
     }
 
-    fn open_file(&self) -> String {
+    pub fn open_file(&mut self) {
+        println!("{:?}", self.args.file);
         match std::fs::read_to_string(&self.args.file) {
-            Ok(content) => return content,
+            Ok(content) => self.file_content = content,
             Err(err) => {
                 eprintln!("Error : {err}");
                 std::process::exit(1);
@@ -28,6 +37,9 @@ impl FileParsing {
         /* First index contain Method, Second
          * Second index contain the path and prams in case of GET
          * Third contain the HTTP version
+         * Gonna Comment the line below because i change my mind i want to
+         * Handle the file segmentation in the main execution this gonna be
+         * function for extracting the ...
          */
         let path: Vec<String> = line.split(" ").into_iter().map(|s| s.to_string()).collect();
 
@@ -36,13 +48,14 @@ impl FileParsing {
          */
         let method_type = path[0].parse::<HTTPMethods>().ok();
         self.args.method = method_type;
-        match &self.args.method {
-            Some(method) => match method {
-                HTTPMethods::POST => self.extract_post_path(Some(path[1].clone())),
-                HTTPMethods::GET => self.extract_get_path(Some(path[1].clone())),
-            },
-            None => {}
-        }
+
+        //match &self.args.method {
+        //    Some(method) => match method {
+        //        HTTPMethods::POST => self.extract_post_path(Some(path[1].clone())),
+        //        HTTPMethods::GET => self.extract_get_path(Some(path[1].clone())),
+        //    },
+        //    None => {}
+        //}
     }
 
     fn extract_post_path(&mut self, parts: Option<String>) {
@@ -83,12 +96,84 @@ impl FileParsing {
     / request path
     */
     fn extract_hostname(&mut self, headers: HeaderMap) {
-        let urlconst = headers.iter().find(|x| x.0 == "Host").map(|x| x.1.clone());
+        let urlconst = headers.get("Host");
+        match urlconst {
+            Some(url) => {
+                self.args.url = format!("http://{}", url.to_string());
+            }
+            None => {
+                panic!("No host found");
+            }
+        }
     }
+
+    fn init_headers_with_defaults() -> HeaderMap {
+        let mut hash = HeaderMap::new();
+
+        let headers = vec![
+            "Content-Type: application/json",
+            "Accept: application/json",
+            "User-Agent: SafeBuster/1.0",
+            "Accept: */*",
+        ];
+
+        headers.iter().for_each(|header| {
+            let mut parts = header.splitn(2, ':');
+            if let (Some(key), Some(value)) = (parts.next(), parts.next()) {
+                let key = key.trim();
+                let value = value.trim();
+
+                if let Ok(header_name) = HeaderName::from_bytes(key.as_bytes()) {
+                    if let Ok(header_value) = HeaderValue::from_str(value) {
+                        hash.insert(header_name, header_value);
+                    }
+                }
+            }
+        });
+
+        hash
+    }
+
+    fn init_headers_with_value(headers: Vec<String>) -> HeaderMap {
+        let mut hash = HeaderMap::new();
+
+        for header in headers {
+            let mut parts = header.splitn(2, ':');
+            if let (Some(key), Some(value)) = (parts.next(), parts.next()) {
+                let key = key.trim();
+                let value = value.trim();
+
+                // Convert key and value into HeaderName and HeaderValue
+                if let Ok(header_name) = HeaderName::from_bytes(key.as_bytes()) {
+                    if let Ok(header_value) = HeaderValue::from_str(value) {
+                        hash.insert(header_name, header_value);
+                    }
+                }
+            }
+        }
+
+        hash
+    }
+    fn prepare_headers(headers: Option<Vec<String>>) -> HeaderMap {
+        let headers_hash;
+        if let Some(header) = headers {
+            headers_hash = FileParsing::init_headers_with_value(header);
+            return headers_hash;
+        } else {
+            headers_hash = FileParsing::init_headers_with_defaults();
+            return headers_hash;
+        }
+    }
+
+    /*
+     * Function to extract the path from the first line in the file for get method
+     */
     fn extract_get_path(&mut self, parts: Option<String>) {
         match parts {
             Some(part) => {
-                let isolated_path = part.split("?").into_iter().next();
+                let path: Vec<String> =
+                    part.split(" ").into_iter().map(|s| s.to_string()).collect();
+                let isolated_path = path[1].split("?").into_iter().next();
                 match isolated_path {
                     Some(path) => {
                         self.args.url = format!("{}{}", self.args.url, path);
@@ -100,5 +185,29 @@ impl FileParsing {
                 panic!("Method not found");
             }
         }
+    }
+
+    fn handle_match_parsing(buf: Option<PartingFileInfo>) -> PartingFileInfo {
+        if let Some(value) = buf {
+            return value;
+        } else {
+            panic!("Error parsing");
+        }
+    }
+    pub fn main_execution(&mut self) {
+        let mut parsing = FileParsing::read_until_char(&self.file_content, "\r\n");
+        // here we gonna do three things
+        let first_line = FileParsing::handle_match_parsing(parsing);
+        println!("{}", first_line.0);
+        self.extract_method_path(first_line.0.clone());
+        parsing = FileParsing::read_until_char(&self.file_content, "\r\n\r\n");
+        let raw_headers = FileParsing::handle_match_parsing(parsing);
+        self.extract_headers(raw_headers.0);
+        // TODO: Change to take instade of clone
+        let parsed_headers = FileParsing::prepare_headers(self.args.headers.clone());
+        self.extract_hostname(parsed_headers.clone());
+        self.extract_get_path(Some(first_line.0));
+        println!("{:#?}", self.args);
+        println!("{:#?}", parsed_headers);
     }
 }

@@ -5,5 +5,8 @@ adding http method handler [done]
 Use Async Operations [done 100%]
 ability to parse files and search for FUZZ to perfome the same Operations [done 60%]
 Fix file parsing, How the headers are handled
+- Implemented function to extract Method, GET prams, HTTP version
+- Implemented function to parse headers
+- Implemented function to extract the host.
 
 checking the require flags based on others

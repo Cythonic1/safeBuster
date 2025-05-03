@@ -1,6 +1,6 @@
 use std::usize;
 
-use reqwest::StatusCode;
+use reqwest::{header::HeaderValue, StatusCode};
 
 pub mod cli;
 pub mod filehandle;
@@ -30,3 +30,12 @@ const DEFAULT_STATUS_CODE: &[u16] = &[
 #[derive(Clone, Debug)]
 struct PartingFileInfo(String, String);
 const FUZZ: &str = "FUZZ";
+
+pub trait HeaderValeExt {
+    fn to_string(&self) -> String;
+}
+impl HeaderValeExt for HeaderValue {
+    fn to_string(&self) -> String {
+        self.to_str().unwrap_or_default().to_string()
+    }
+}

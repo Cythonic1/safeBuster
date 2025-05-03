@@ -1,5 +1,5 @@
 use clap::{Parser, ValueEnum};
-use reqwest::StatusCode;
+use core::fmt;
 use std::{path::PathBuf, str::FromStr, usize};
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -8,6 +8,11 @@ pub enum HTTPMethods {
     GET,
 }
 
+impl fmt::Display for HTTPMethods {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self)
+    }
+}
 impl FromStr for HTTPMethods {
     type Err = ();
     fn from_str(s: &str) -> Result<Self, Self::Err> {
