@@ -1,29 +1,15 @@
 use super::FUZZ;
-use super::{
-    cli::{self, HTTPMethods},
-    DEFAULT_STATUS_CODE,
-};
-use futures_util::io::BufReader;
-use reqwest::{
-    header::{HeaderMap, HeaderName, HeaderValue},
-    Client, StatusCode,
-};
-use std::process::ExitStatus;
+use super::{ cli::{self, HTTPMethods},DEFAULT_STATUS_CODE};
+use reqwest::{ header::{HeaderMap, HeaderName, HeaderValue}, Client};
 use std::time::Instant;
-use std::{
-    path::PathBuf,
-    process::Command,
-    sync::{
-        atomic::{AtomicUsize, Ordering},
-        Arc,
-    },
-};
-use tokio::{
-    io::AsyncBufReadExt,
-    sync::Semaphore,
-    task::{try_id, JoinSet},
-    time::{sleep, Duration},
-};
+use std::sync::{atomic::{AtomicUsize, Ordering}, Arc};
+
+use tokio::{ io::AsyncBufReadExt, sync::Semaphore, task::JoinSet, time::{sleep, Duration}};
+
+
+
+// TODO: Recator this file and move the share function into share file.
+
 
 fn init_headers_with_defaults() -> HeaderMap {
     let mut hash = HeaderMap::new();
@@ -156,83 +142,6 @@ fn get_prams(test: String) -> Option<String> {
     }
 }
 
-// TODO: Continue Parsing The File.
-// TODO : Make it in its own module
-//
-pub fn parse_file(file: PathBuf, _args: super::cli::Args) -> Option<Vec<String>> {
-    // Cheching the existence of the file and return its content
-    let file_content = match std::fs::read_to_string(file) {
-        Ok(content) => content,
-        Err(err) => {
-            eprintln!("Error : {err}");
-            return None;
-        }
-    };
-
-    // Extract the First line of the request
-    // GET /some.php?user=man HTTP/2
-    let url = read_until_char(&file_content, "\r\n");
-    println!("URL: {:?}", url);
-    // let prams = get_prams(url.unwrap().0);
-    // unwrap the results of the first line and returns the data
-    let data_after_url = if let Some(data) = url {
-        data
-    } else {
-        return None;
-    };
-
-    println!("Data After rul: {:?}", data_after_url.0);
-    // Extract the path which inlcude the GET prams and the Path.
-    let path: Vec<String> = data_after_url
-        .0
-        .split(" ")
-        .into_iter()
-        .map(|s| s.to_string())
-        .collect();
-
-    println!("{}", path[1]);
-    // Contrnue extracting the path. Consider adding it to the above code
-    let path_path = path[1].split("?").into_iter().next();
-
-    println!("{}", path_path.unwrap());
-
-    // Extracting the GET prameters
-    let prams = get_prams(data_after_url.0);
-    println!("GET PRAMS : {:?}", prams.unwrap());
-
-    // Extracting the headers
-    let headers = read_until_char(&data_after_url.1, "\r\n\r\n");
-
-    // Convert the headers into vector so we can use it in prepare_headers function
-    let headers_vec: Vec<String> = headers
-        .unwrap()
-        .0
-        .split("\r\n")
-        .map(|s| s.to_string())
-        .collect();
-
-    // Parse the headers into HeaderMap.
-    let parsed_heaers = prepare_headers(Some(headers_vec));
-
-    println!("HEADERS: {:#?}", parsed_heaers);
-
-    // Extracting the host name/ DNS
-    let urlconst = parsed_heaers
-        .iter()
-        .find(|x| x.0 == "Host")
-        .map(|x| x.1.clone());
-    //println!("Host is : {:?}", urlconst.unwrap());
-
-    // printing the full path;
-    let fullpath = format!(
-        "{}{}",
-        urlconst.unwrap().to_str().unwrap(),
-        path_path.unwrap()
-    );
-    println!("Full path is : {}", fullpath);
-
-    Some(vec!["Hellow".to_string()])
-}
 
 async fn craft_request(args: cli::Args, client: Arc<Client>, word: String) {
     let args_clone = search_fuzz(args.clone(), &word);
@@ -307,6 +216,7 @@ async fn craft_request(args: cli::Args, client: Arc<Client>, word: String) {
 
 pub async fn safe_buster(args: cli::Args) -> tokio::io::Result<()> {
     const MAX_CONCURRENT_TASKS: usize = 100;
+    println!("am here");
 
     let semaphore = Arc::new(Semaphore::new(args.concurrent_tasks));
     let client = Arc::new(
