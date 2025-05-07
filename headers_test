@@ -1,5 +1,5 @@
 GET /some.php HTTP/2
-Host: example.com
+Host: FUZZ.example.com
 Cache-Control: max-age=0
 Sec-Ch-Ua: "Chromium";v="133", "Not(A:Brand";v="99"
 Sec-Ch-Ua-Mobile: ?0

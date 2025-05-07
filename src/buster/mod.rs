@@ -5,6 +5,7 @@ use reqwest::{header::HeaderValue, StatusCode};
 pub mod cli;
 pub mod filehandle;
 pub mod safebuster;
+pub mod shared;
 
 const DEFAULT_STATUS_CODE: &[u16] = &[
     StatusCode::OK.as_u16(),

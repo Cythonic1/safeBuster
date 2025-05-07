@@ -11,65 +11,6 @@ use tokio::{ io::AsyncBufReadExt, sync::Semaphore, task::JoinSet, time::{sleep, 
 // TODO: Recator this file and move the share function into share file.
 
 
-fn init_headers_with_defaults() -> HeaderMap {
-    let mut hash = HeaderMap::new();
-
-    let headers = vec![
-        "Content-Type: application/json",
-        "Accept: application/json",
-        "User-Agent: SafeBuster/1.0",
-        "Accept: */*",
-    ];
-
-    headers.iter().for_each(|header| {
-        let mut parts = header.splitn(2, ':');
-        if let (Some(key), Some(value)) = (parts.next(), parts.next()) {
-            let key = key.trim();
-            let value = value.trim();
-
-            if let Ok(header_name) = HeaderName::from_bytes(key.as_bytes()) {
-                if let Ok(header_value) = HeaderValue::from_str(value) {
-                    hash.insert(header_name, header_value);
-                }
-            }
-        }
-    });
-
-    hash
-}
-
-fn init_headers_with_value(headers: Vec<String>) -> HeaderMap {
-    let mut hash = HeaderMap::new();
-
-    for header in headers {
-        let mut parts = header.splitn(2, ':');
-        if let (Some(key), Some(value)) = (parts.next(), parts.next()) {
-            let key = key.trim();
-            let value = value.trim();
-
-            // Convert key and value into HeaderName and HeaderValue
-            if let Ok(header_name) = HeaderName::from_bytes(key.as_bytes()) {
-                if let Ok(header_value) = HeaderValue::from_str(value) {
-                    hash.insert(header_name, header_value);
-                }
-            }
-        }
-    }
-
-    hash
-}
-
-fn prepare_headers(headers: Option<Vec<String>>) -> HeaderMap {
-    let headers_hash;
-    if let Some(header) = headers {
-        headers_hash = init_headers_with_value(header);
-        return headers_hash;
-    } else {
-        headers_hash = init_headers_with_defaults();
-        return headers_hash;
-    }
-}
-
 pub fn search_fuzz(mut args: cli::Args, word: &str) -> cli::Args {
     let mut counter_occurences = 0;
     if args.url.contains(FUZZ) {
@@ -90,6 +31,12 @@ pub fn search_fuzz(mut args: cli::Args, word: &str) -> cli::Args {
             }
         }
     }
+
+    if counter_occurences == 0 {
+        panic!("no FUZZ found");
+    }
+
+    // println!("{:#?}", args);
 
     return args;
 }
@@ -130,22 +77,9 @@ fn read_until_char(input: &str, delimiter: &str) -> Option<super::PartingFileInf
     ))
 }
 
-fn get_prams(test: String) -> Option<String> {
-    let start_get = test.find("?");
-    let filter_str: String;
-    if let Some(index) = start_get {
-        filter_str = test[index..].to_string();
-        let prams = read_until_char(&filter_str, " ");
-        return Some(prams.unwrap().0);
-    } else {
-        return None;
-    }
-}
-
-
 async fn craft_request(args: cli::Args, client: Arc<Client>, word: String) {
     let args_clone = search_fuzz(args.clone(), &word);
-    let headers_hash = prepare_headers(args_clone.headers.clone());
+    let headers_hash = super::shared::prepare_headers(args_clone.headers.clone());
 
     // Start measuring the request duration
     let start_time = Instant::now();

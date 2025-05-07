@@ -1,16 +1,13 @@
 // This mainly to parse http files and make request according to them
 
-use std::panic;
 
 use super::cli::{self, Args, HTTPMethods};
-use super::HeaderValeExt;
 use super::PartingFileInfo;
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue}
-;
 pub struct FileParsing {
     pub args: cli::Args,
     file_content: String,
 }
+
 impl FileParsing {
     pub fn new(args: Args) -> Self {
         FileParsing {
@@ -93,77 +90,20 @@ impl FileParsing {
     /* TODO: Add the functionlity to convert from enum to normal string inorder to constrcut the
     / request path
     */
-    fn extract_hostname(&mut self, headers: HeaderMap) {
-        let urlconst = headers.get("Host");
-        match urlconst {
-            Some(url) => {
-                self.args.url = format!("http://{}", url.to_string());
-            }
-            None => {
-                panic!("No host found");
-            }
-        }
+    fn extract_hostname(&mut self, headers: Option<Vec<String>>) {
+        let host_header = headers.as_ref()
+            .and_then(|h| h.iter().find(|header| header.contains("Host")))
+            .ok_or("No Host header found").unwrap();
+
+        let host_part = host_header.split(':')
+            .nth(1)
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .ok_or("Invalid Host header format").unwrap();
+
+        self.args.url = format!("http://{}", host_part);
     }
 
-
-    fn init_headers_with_defaults() -> HeaderMap {
-        let mut hash = HeaderMap::new();
-
-        let headers = vec![
-            "Content-Type: application/json",
-            "Accept: application/json",
-            "User-Agent: SafeBuster/1.0",
-            "Accept: */*",
-        ];
-
-        headers.iter().for_each(|header| {
-            let mut parts = header.splitn(2, ':');
-            if let (Some(key), Some(value)) = (parts.next(), parts.next()) {
-                let key = key.trim();
-                let value = value.trim();
-
-                if let Ok(header_name) = HeaderName::from_bytes(key.as_bytes()) {
-                    if let Ok(header_value) = HeaderValue::from_str(value) {
-                        hash.insert(header_name, header_value);
-                    }
-                }
-            }
-        });
-
-        hash
-    }
-
-    fn init_headers_with_value(headers: Vec<String>) -> HeaderMap {
-        let mut hash = HeaderMap::new();
-
-        for header in headers {
-            let mut parts = header.splitn(2, ':');
-            if let (Some(key), Some(value)) = (parts.next(), parts.next()) {
-                let key = key.trim();
-                let value = value.trim();
-
-                // Convert key and value into HeaderName and HeaderValue
-                //
-                if let Ok(header_name) = HeaderName::from_bytes(key.as_bytes()) {
-                    if let Ok(header_value) = HeaderValue::from_str(value) {
-                        hash.insert(header_name, header_value);
-                    }
-                }
-            }
-        }
-
-        hash
-    }
-    fn prepare_headers(headers: Option<Vec<String>>) -> HeaderMap {
-        let headers_hash;
-        if let Some(header) = headers {
-            headers_hash = FileParsing::init_headers_with_value(header);
-            headers_hash
-        } else {
-            headers_hash = FileParsing::init_headers_with_defaults();
-            headers_hash
-        }
-    }
 
     /*
      * Function to extract the path from the first line in the file for get method
@@ -205,13 +145,17 @@ impl FileParsing {
         parsing = FileParsing::read_until_char(&first_line.1, "\r\n\r\n");
         let raw_headers = FileParsing::handle_match_parsing(parsing);
         self.extract_headers(raw_headers.0);
-       
+        self.extract_hostname(self.args.headers.clone());
+        self.args = super::safebuster::search_fuzz(self.args.clone(), "Soemthing");
+
         // TODO: Change to take instade of clone
-        let parsed_headers = FileParsing::prepare_headers(self.args.headers.clone());
-        self.extract_hostname(parsed_headers.clone());
+        // let _parsed_headers = super::shared::prepare_headers(self.args.headers.clone());
         self.extract_get_path(Some(first_line.0));
+
+        self.args.data = raw_headers.1;
        
         println!("{:#?}", self.args);
 
     }
 }
+
