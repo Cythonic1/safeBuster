@@ -6,14 +6,22 @@ mod buster;
 #[tokio::main(flavor = "multi_thread", worker_threads = 20)]
 async fn main() {
     let args = buster::cli::Args::parse();
-    //let file = PathBuf::from("/home/groot/projects/rust/safeBuster/headers_test");
-    //let _ = buster::safebuster::parse_file(file, args);
-    let _ = buster::safebuster::safe_buster(args.clone()).await;
-    // let _ = buster::safebuster::search_fuzz(args, "Something");
 
-    // let mut test = buster::filehandle::FileParsing::new(args);
-    // test.open_file();
-    // test.main_execution();
 
-    
+    if args.url.clone().is_some(){
+            println!("You are using the cli verstion");
+            let _ = buster::safebuster::safe_buster(args.clone()).await;
+    }else {
+        if args.file.is_some() {
+            let mut test = buster::filehandle::FileParsing::new(args);
+            test.open_file();
+            test.prepare_args_from_file();
+            let _ = buster::safebuster::safe_buster(test.args.clone()).await;
+
+        }else {
+            panic!("No URL provided");
+        }
+    }
+
+
 }

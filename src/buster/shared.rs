@@ -6,7 +6,7 @@ use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 fn init_headers_with_defaults() -> HeaderMap {
     let mut hash = HeaderMap::new();
 
-    let headers = vec![
+    let headers = [
         "Content-Type: application/json",
         "Accept: application/json",
         "User-Agent: SafeBuster/1.0",

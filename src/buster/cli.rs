@@ -1,6 +1,6 @@
 use clap::{Parser, ValueEnum};
 use core::fmt;
-use std::{path::PathBuf, str::FromStr, usize};
+use std::{fmt::write, path::PathBuf, str::FromStr, usize};
 
 #[derive(Debug, Clone, ValueEnum)]
 pub enum HTTPMethods {
@@ -10,7 +10,12 @@ pub enum HTTPMethods {
 
 impl fmt::Display for HTTPMethods {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)
+        let method = match  self{
+            HTTPMethods::GET => "GET",
+            HTTPMethods::POST => "POST"
+        };
+
+        write!(f, "{}", method)
     }
 }
 impl FromStr for HTTPMethods {
@@ -28,7 +33,7 @@ impl FromStr for HTTPMethods {
 #[command(version, about, long_about)]
 pub struct Args {
     #[arg(short, long)]
-    pub url: String,
+    pub url: Option<String>,
 
     #[arg(long = "H", help = "headers sperated by ','", value_delimiter = ',')]
     pub headers: Option<Vec<String>>,
@@ -63,5 +68,5 @@ pub struct Args {
     pub concurrent_tasks: usize,
 
     #[arg(short, long)]
-    pub file: PathBuf,
+    pub file: Option<PathBuf>,
 }
