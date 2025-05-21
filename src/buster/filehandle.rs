@@ -1,6 +1,8 @@
 // This mainly to parse http files and make request according to them
 
 
+use std::fs::{self, File};
+
 use super::cli::{self, Args, HTTPMethods};
 use super::PartingFileInfo;
 pub struct FileParsing {
@@ -17,8 +19,12 @@ impl FileParsing {
     }
 
     pub fn open_file(&mut self) {
-        println!("{:?}", self.args.file);
-        match std::fs::read_to_string(&self.args.file.clone().unwrap()) {
+        let path = match &self.args.file {
+            Some(p) => p,
+            None => panic!("No file was provided")
+        };
+
+        match fs::read_to_string(path){
             Ok(content) => self.file_content = content,
             Err(err) => {
                 eprintln!("Error : {err}");
@@ -48,7 +54,6 @@ impl FileParsing {
     fn extract_post_path(&mut self, parts: Option<String>) {
         let base_url = self.args.url.as_ref().ok_or("Base URL is missing");
         match parts {
-
             Some(path) => {
 
                 self.args.url = Some(format!("{}{}", base_url.unwrap(), path));
@@ -80,19 +85,16 @@ impl FileParsing {
 
 
     fn extract_hostname(&mut self, headers: Option<Vec<String>>) {
-        let host_header = headers
-            .as_ref()
-            .and_then(|h| h.iter().find(|header| header.contains("Host")))
-            .ok_or("No Host header found")
-            .unwrap();
+        let host_header = match headers.as_ref().and_then(|h| h.iter().find(|header| header.contains("Host"))){
+            Some(host) => host,
+            None => panic!("Host not found")
+        };
+            
 
-        let host_part = host_header
-            .split(':')
-            .nth(1)
-            .map(|s| s.trim())
-            .filter(|s| !s.is_empty())
-            .ok_or("Invalid Host header format")
-            .unwrap();
+        let host_part = match host_header.split(':').nth(1).map(|s| s.trim()).filter(|s| !s.is_empty()){
+            Some(host) => host,
+            None => panic!("Host not found")
+        };
 
         self.args.url = Some(format!("http://{}", host_part));
     }
@@ -106,14 +108,17 @@ impl FileParsing {
                 let path: Vec<String> = part.split(" ").map(|s| s.to_string()).collect();
 
                 //NOTE: If '?' Does not exist no prameters then it gonna return the path[1] it self
-                let isolated_path = path[1].clone();
+                let isolated_path = &path[1];
                 println!("{isolated_path:#?}");
 
                 // NOTE: Removing match statement and use unwrap_or insted better option.
-                
-                let base_url = self.args.url.as_ref().ok_or("Base URL is missing");
-
-                self.args.url = Some(format!("{}{}", base_url.unwrap(), isolated_path));
+                let base_url = self.args.url.as_ref();
+                match base_url {
+                    Some(base) =>  {
+                        Some(format!("{}{}", base, isolated_path));
+                    },
+                    None => panic!("No base URL found")
+                }
             }
             None => {
                 panic!("Method not found");

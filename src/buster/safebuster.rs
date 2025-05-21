@@ -3,7 +3,6 @@ use super::{ cli::{self, HTTPMethods},DEFAULT_STATUS_CODE};
 use reqwest::Client;
 use std::time::Instant;
 use std::sync::{atomic::{AtomicUsize, Ordering}, Arc};
-
 use tokio::{ io::AsyncBufReadExt, sync::Semaphore, task::JoinSet, time::{sleep, Duration}};
 
 
@@ -61,43 +60,43 @@ fn filter_response(status_code: u16, res_body: &str, res_len: usize, filters: cl
 
 
 async fn craft_request(args: cli::Args, client: Arc<Client>, word: String) {
-    let args_clone = search_fuzz(args.clone(), &word);
+    let args_clone = search_fuzz(args, &word);
     let headers_hash = super::shared::prepare_headers(args_clone.headers.clone());
 
     // Start measuring the request duration
     let start_time = Instant::now();
 
     let res = match args_clone.method {
-       Some(HTTPMethods::GET) => match client
+        Some(HTTPMethods::GET) => match client
             .get(args_clone.url.clone().unwrap())
             .headers(headers_hash)
             .send()
             .await
-        {
-            Ok(body) => body,
-            Err(_) => return,
-        },
+            {
+                Ok(body) => body,
+                Err(_) => return,
+            },
         Some(HTTPMethods::POST) => match client
             .post(args_clone.url.clone().unwrap())
             .headers(headers_hash)
             .body(args_clone.data.clone())
             .send()
             .await
-        {
-            Ok(body) => body,
-            Err(_) => return,
-        },
+            {
+                Ok(body) => body,
+                Err(_) => return,
+            },
         None => {
             match client
                 .get(args_clone.url.clone().unwrap())
                 .headers(headers_hash)
                 .send()
                 .await
-            {
-                Ok(body) => body,
-                Err(_) => return,
-            }
-       }
+                {
+                    Ok(body) => body,
+                    Err(_) => return,
+                }
+        }
     };
 
     // Measure the duration

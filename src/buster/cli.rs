@@ -1,6 +1,6 @@
 use clap::{Parser, ValueEnum};
 use core::fmt;
-use std::{fmt::write, path::PathBuf, str::FromStr, usize};
+use std::{path::PathBuf, str::FromStr, usize};
 
 #[derive(Debug, Clone, ValueEnum)]
 pub enum HTTPMethods {
