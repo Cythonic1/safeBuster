@@ -64,6 +64,9 @@ pub struct Args {
     #[arg(long = "fr", help = "Filter By reponse Length", value_delimiter = ',')]
     pub filter_reponse_len: Option<Vec<usize>>,
 
+    #[arg(long = "fw", help = "Filter by the words")]
+    pub filter_words: Option<Vec<u32>>,
+
     #[arg(long = "cn", help = "concurent tasks", default_value_t = 100)]
     pub concurrent_tasks: usize,
 

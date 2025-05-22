@@ -64,7 +64,6 @@ impl FileParsing {
     }
 
     fn read_until_char(input: &str, delimiter: &str) -> Option<super::PartingFileInfo> {
-        println!("The len of the given strrring is {}", delimiter.len());
         let match_found_index = input.find(delimiter)?;
 
         Some(super::PartingFileInfo(
@@ -108,7 +107,6 @@ impl FileParsing {
 
                 //NOTE: If '?' Does not exist no prameters then it gonna return the path[1] it self
                 let isolated_path = &path[1];
-                println!("{isolated_path:#?}");
 
                 // NOTE: Removing match statement and use unwrap_or insted better option.
                 let base_url = self.args.url.as_ref();
@@ -138,7 +136,6 @@ impl FileParsing {
 
         // Extracting HTTP method
         let first_line = FileParsing::handle_match_parsing(parsing);
-        println!("{}", first_line.0);
         self.extract_method(&first_line.0);
 
 
