@@ -12,16 +12,16 @@ async fn main() {
     if args.url.clone().is_some(){
             println!("You are using the cli verstion");
             let _ = buster::safebuster::safe_buster(args.clone()).await;
-    }else {
-        if args.file.is_some() {
-            let mut test = buster::filehandle::FileParsing::new(args);
-            test.open_file();
-            test.prepare_args_from_file();
-            let _ = buster::safebuster::safe_buster(test.args.clone()).await;
+    }
 
-        }else {
-            panic!("No URL provided");
-        }
+    if args.file.is_some() {
+        let mut test = buster::filehandle::FileParsing::new(args);
+        test.open_file();
+        test.prepare_args_from_file();
+        let _ = buster::safebuster::safe_buster(test.args.clone()).await;
+
+    }else {
+        panic!("No URL provided");
     }
 
 

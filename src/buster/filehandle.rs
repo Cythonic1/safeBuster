@@ -1,7 +1,7 @@
 // This mainly to parse http files and make request according to them
 
 
-use std::fs::{self, File};
+use std::fs::{self};
 
 use super::cli::{self, Args, HTTPMethods};
 use super::PartingFileInfo;
@@ -33,7 +33,7 @@ impl FileParsing {
         };
     }
 
-    fn extract_method_path(&mut self, line: String) {
+    fn extract_method(&mut self, line: &str) {
         /* First index contain Method, Second
          * Second index contain the path and prams in case of GET
          * Third contain the HTTP version
@@ -48,7 +48,6 @@ impl FileParsing {
          */
         let method_type = path[0].parse::<HTTPMethods>().ok();
         self.args.method = method_type;
-
     }
 
     fn extract_post_path(&mut self, parts: Option<String>) {
@@ -84,7 +83,7 @@ impl FileParsing {
     }
 
 
-    fn extract_hostname(&mut self, headers: Option<Vec<String>>) {
+    fn extract_hostname(&self, headers: &Option<Vec<String>>) -> Option<String>{
         let host_header = match headers.as_ref().and_then(|h| h.iter().find(|header| header.contains("Host"))){
             Some(host) => host,
             None => panic!("Host not found")
@@ -96,7 +95,7 @@ impl FileParsing {
             None => panic!("Host not found")
         };
 
-        self.args.url = Some(format!("http://{}", host_part));
+        Some(format!("http://{}", host_part))
     }
 
     /*
@@ -136,25 +135,26 @@ impl FileParsing {
 
     pub fn prepare_args_from_file(&mut self) {
         let mut parsing = FileParsing::read_until_char(&self.file_content, "\r\n");
-        // here we gonna do three things
 
+        // Extracting HTTP method
         let first_line = FileParsing::handle_match_parsing(parsing);
         println!("{}", first_line.0);
-        self.extract_method_path(first_line.0.clone());
+        self.extract_method(&first_line.0);
 
+
+        // Extracting headers from the file and put them in a vector
         parsing = FileParsing::read_until_char(&first_line.1, "\r\n\r\n");
         let raw_headers = FileParsing::handle_match_parsing(parsing);
         self.extract_headers(raw_headers.0);
-        self.extract_hostname(self.args.headers.clone());
-        println!("{:#?}", self.args.headers);
-        self.args = super::safebuster::search_fuzz(self.args.clone(), "Soemthing");
 
-        // TODO: Change to take instade of clone
-        // let _parsed_headers = super::shared::prepare_headers(self.args.headers.clone());
+        // URL
+        self.args.url = self.extract_hostname(&self.args.headers);
+
+        // Extracting GET prameters and URL path and append them to the URL
         self.extract_get_path(Some(first_line.0));
 
+        // Pitting the Rest of the raw data into the data if it a post
         self.args.data = raw_headers.1;
 
-        println!("{:#?}", self.args);
     }
 }
