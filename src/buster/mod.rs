@@ -1,5 +1,3 @@
-use std::usize;
-
 use reqwest::{header::HeaderValue, StatusCode};
 
 pub mod cli;
